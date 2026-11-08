@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Energy Unit Converter</title>
+<style>
+  :root {
+    --bg: #eef1f4;
+    --surface: #ffffff;
+    --ink: #1d2733;
+    --muted: #5d6b7a;
+    --line: #c9d1d9;
+    --accent: #0f6b6b;
+    --accent-ink: #ffffff;
+    --radius: 6px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151b22;
+      --surface: #1e262f;
+      --ink: #e6ebf0;
+      --muted: #94a3b2;
+      --line: #35414d;
+      --accent: #4fb3b3;
+      --accent-ink: #0c1a1a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background: var(--bg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.7;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 40px 20px 64px; }
+  h1 { margin: 0 0 8px; font-size: 1.5rem; font-weight: 700; letter-spacing: .02em; }
+  .lead { margin: 0 0 28px; color: var(--muted); font-size: .95rem; }
+
+  /* One row per unit: edit any field and the others update */
+  .converter { display: grid; gap: 12px; }
+  .row { display: grid; grid-template-columns: 1fr 7.5rem; gap: 8px; align-items: stretch; }
+  .row input {
+    font: inherit; font-size: 1.35rem; font-variant-numeric: tabular-nums;
+    width: 100%; min-width: 0; padding: 12px 14px;
+    color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  .row.active input { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+  .unit {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    padding: 0 4px 0 2px; font-size: 1rem;
+  }
+  .unit button {
+    font: inherit; font-size: .75rem; padding: 2px 8px;
+    color: var(--accent); background: transparent;
+    border: 1px solid var(--accent); border-radius: var(--radius);
+    cursor: pointer;
+  }
+
+  .actions { margin-top: 20px; }
+  .actions button {
+    font: inherit; font-size: .9rem; padding: 6px 14px;
+    color: var(--ink); background: transparent;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    cursor: pointer;
+  }
+
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  footer { margin-top: 48px; color: var(--muted); font-size: .8rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Energy Unit Converter</h1>
+  <p class="lead">Type a value in any field. The other units update at once.</p>
+
+  <div class="converter" id="converter"></div>
+
+  <div class="actions"><button type="button" id="reset">Reset</button></div>
+
+  <footer>
+    Calculated in your browser, with SI-exact constants (h, c, e, N<sub>A</sub>) and CODATA 2022 for the Hartree energy.
+    Wavenumber and wavelength are converted with E = hc &times; wavenumber and E = hc / wavelength. Wavelength is left blank for zero or negative energy.
+  </footer>
+</main>
+
+<script>
+/* ============================================================
+   Physical constants
+   ============================================================ */
+const H  = 6.62607015e-34;      // Planck constant, J s (exact)
+const C  = 299792458;           // speed of light, m/s (exact)
+const E  = 1.602176634e-19;     // elementary charge, C (exact) -> 1 eV in J
+const NA = 6.02214076e23;       // Avogadro constant, 1/mol (exact)
+const EH = 4.3597447222060e-18; // Hartree energy, J (CODATA 2022)
+
+/* ============================================================
+   Unit data
+   toJ / fromJ: convert to and from joules.
+   Most units are linear, so linear(x) takes joules per 1 unit.
+   Wavelength is reciprocal (E = hc / wavelength), so it has its own functions.
+   To add a unit, just add one line here.
+   ============================================================ */
+const linear = joule => ({ toJ: v => v * joule, fromJ: j => j / joule });
+
+const UNITS = [
+  { id: "eV",      label: "eV",                 ...linear(E) },
+  { id: "hartree", label: "Hartree",            ...linear(EH) },
+  { id: "kjmol",   label: "kJ mol\u207B\u00B9", ...linear(1000 / NA) },
+  { id: "cm1",     label: "cm\u207B\u00B9",     ...linear(H * C * 100) },
+  { id: "nm",      label: "nm",
+    toJ:   v => (v > 0 ? (H * C * 1e9) / v : NaN),
+    fromJ: j => (j > 0 ? (H * C * 1e9) / j : NaN) }
+];
+
+const DEFAULT_VALUE = 1;
+const DEFAULT_UNIT = "eV";
+
+/* ============================================================
+   Formatting
+   ============================================================ */
+function format(n) {
+  if (!Number.isFinite(n)) return "";
+  const abs = Math.abs(n);
+  if (abs !== 0 && (abs >= 1e9 || abs < 1e-5)) return n.toExponential(8);
+  return String(parseFloat(n.toPrecision(10)));
+}
+
+/* ============================================================
+   UI
+   ============================================================ */
+const container = document.getElementById("converter");
+const inputs = {};
+const rows = {};
+
+for (const u of UNITS) {
+  const row = document.createElement("div");
+  row.className = "row";
+
+  const input = document.createElement("input");
+  input.type = "number";
+  input.inputMode = "decimal";
+  input.step = "any";
+  input.setAttribute("aria-label", "Value in " + u.label);
+  input.addEventListener("input", () => update(u.id));
+
+  const unit = document.createElement("div");
+  unit.className = "unit";
+  const name = document.createElement("span");
+  name.textContent = u.label;
+  const copy = document.createElement("button");
+  copy.type = "button";
+  copy.textContent = "Copy";
+  copy.setAttribute("aria-label", "Copy value in " + u.label);
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(input.value);
+      copy.textContent = "Copied";
+      setTimeout(() => (copy.textContent = "Copy"), 1000);
+    } catch (e) { /* clipboard unavailable: ignore */ }
+  });
+  unit.append(name, copy);
+
+  row.append(input, unit);
+  container.appendChild(row);
+  inputs[u.id] = input;
+  rows[u.id] = row;
+}
+
+// Convert from whichever field was edited into every other unit
+function update(sourceId) {
+  const src = UNITS.find(u => u.id === sourceId);
+  for (const id in rows) rows[id].classList.toggle("active", id === sourceId);
+
+  const v = parseFloat(inputs[sourceId].value);
+  const joules = src.toJ(v);
+
+  for (const u of UNITS) {
+    if (u.id === sourceId) continue;
+    // Blank when the input is empty or has no valid equivalent (e.g. 0 or negative wavelength)
+    inputs[u.id].value = Number.isFinite(joules) ? format(u.fromJ(joules)) : "";
+  }
+}
+
+function reset() {
+  inputs[DEFAULT_UNIT].value = DEFAULT_VALUE;
+  update(DEFAULT_UNIT);
+}
+
+document.getElementById("reset").addEventListener("click", reset);
+reset();
+</script>
+</body>
+</html>
