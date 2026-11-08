@@ -91,7 +91,7 @@
 <body>
 <main>
   <h1>Unit Converter</h1>
-  <p class="intro">A simple unit converter for energy and X-ray diffraction (XRD) with NO WARRANTY and for private use only. Convert between eV, Hartree, kJ mol&#8315;&sup1;, cm&#8315;&sup1; and nm, or find 2&theta;, d and Q from an X-ray wavelength or energy. Everything runs in your browser.</p>
+  <p class="intro">A simple unit converter for energy and X-ray diffraction (XRD) with NO WARRANTY and for private use only. Convert between eV, Hartree, kJ mol&#8315;&sup1;, cm&#8315;&sup1; and nm, or find 2&theta;, d and Q from an X-ray wavelength or energy.</p>
 
   <div class="tabs" id="tabs" role="group" aria-label="Conversion category"></div>
 
@@ -269,8 +269,8 @@ preset.setAttribute("aria-label", "Preset X-ray source");
 preset.add(new Option("Custom", ""));
 PRESETS.forEach((p, i) => preset.add(new Option(`${p.label} (${p.wavelength} \u00C5)`, String(i))));
 
-const wl  = makeRow($("xrdSource"), "\u00C5 (wavelength)", () => { preset.value = ""; wavelengthEdited(); });
-const kev = makeRow($("xrdSource"), "keV (energy)",        () => { preset.value = ""; energyEdited(); });
+const wl  = makeRow($("xrdSource"), "\u00C5", () => { preset.value = ""; wavelengthEdited(); });
+const kev = makeRow($("xrdSource"), "keV",        () => { preset.value = ""; energyEdited(); });
 wl.row.append(preset);
 preset.addEventListener("change", () => {
   if (preset.value === "") return;
