@@ -84,7 +84,7 @@
 
   /* Labeled fields (chemical formula and unit cell) */
   .field { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); min-width: 0; }
-  .field input {
+  .field input, .field select {
     font: inherit; font-size: 1.1rem; font-variant-numeric: tabular-nums;
     width: 100%; min-width: 0; padding: 10px;
     color: var(--ink); background: var(--surface);
@@ -94,6 +94,9 @@
   .field.z-field { grid-column: 1 / -1; }
   .field.z-field input { max-width: 10rem; }
   .cell-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .cell-grid.two { grid-template-columns: repeat(2, 1fr); }
+  .field.unit-field { grid-column: 1 / -1; }
+  .field.unit-field select { max-width: 10rem; }
 
   :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   footer { margin-top: 48px; color: var(--muted); font-size: .8rem; }
@@ -104,7 +107,7 @@
 <body>
 <main>
   <h1>Unit Converter</h1>
-  <p class="intro">A simple unit converter for energy and X-ray diffraction (XRD) with NO WARRANTY and for private use only. Convert between eV, Hartree, kJ mol&#8315;&sup1;, cm&#8315;&sup1;, nm and K, find 2&theta;, d and Q from an X-ray wavelength or energy, work out the mass (mg), amount (mmol) and concentration (mM) of a reagent solution, or calculate the density of a crystal from its chemical formula and unit cell.</p>
+  <p class="intro">A simple unit converter for energy and X-ray diffraction (XRD) with NO WARRANTY and for private use only. Convert between eV, Hartree, kJ mol&#8315;&sup1;, cm&#8315;&sup1;, nm and K, find 2&theta;, d and Q from an X-ray wavelength or energy, work out the mass (mg), amount (mmol) and concentration (mM) of a reagent solution, calculate the density of a crystal from its chemical formula and unit cell, find the conductivity of a cylindrical sample from its resistance, or estimate an activation energy from values measured at two temperatures.</p>
 
   <div class="tabs" id="tabs" role="group" aria-label="Conversion category"></div>
 
@@ -157,12 +160,40 @@
     <div class="actions"><button type="button" id="crystalReset">Reset</button></div>
   </section>
 
+  <!-- ===== Conductivity ===== -->
+  <section id="panel-conductivity" hidden>
+    <h2>1. Cylindrical sample</h2>
+    <p class="lead">Set the length (L) and the radius (r) of the sample.</p>
+    <div class="group" id="conductivitySample"></div>
+
+    <h2>2. Resistance and conductivity</h2>
+    <p class="lead">Type the resistance or the conductivity. The other one updates at once. Conductivity is shown in exponential form.</p>
+    <div class="group" id="conductivityResult"></div>
+    <p class="status" id="conductivityStatus" aria-live="polite"></p>
+    <div class="actions"><button type="button" id="conductivityReset">Reset</button></div>
+  </section>
+
+  <!-- ===== Activation energy ===== -->
+  <section id="panel-activation" hidden>
+    <h2>1. Measurements</h2>
+    <p class="lead">Enter two temperatures and the value measured at each, such as a rate constant or a conductivity. The unit of the values does not matter, as long as both use the same one.</p>
+    <div class="cell-grid two" id="activationInputs"></div>
+
+    <h2>2. Activation energy</h2>
+    <p class="lead">Calculated from the Arrhenius equation, ln(v&#8322;/v&#8321;) = &minus;(E<sub>a</sub>/R)(1/T&#8322; &minus; 1/T&#8321;).</p>
+    <div class="group" id="activationResult"></div>
+    <p class="status" id="activationStatus" aria-live="polite"></p>
+    <div class="actions"><button type="button" id="activationReset">Reset</button></div>
+  </section>
+
   <footer>
     <p>Calculated in your browser. Constants h, c, e, N<sub>A</sub> and k<sub>B</sub> are SI-exact; the Hartree energy is CODATA 2022.</p>
     <p>Energy: wavenumber and wavelength are converted with E = hc &times; wavenumber and E = hc / wavelength. Temperature is E / k<sub>B</sub> (the molar energy divided by the gas constant R).</p>
     <p>XRD: &lambda; = 2d sin&theta;, Q = 4&pi; sin&theta; / &lambda; = 2&pi; / d, &lambda;(&Aring;) = 12.3984198 / E(keV). Preset wavelengths are typical tabulated values.</p>
     <p>Reagent: amount (mmol) = mass (mg) / molecular weight (g/mol) = concentration (mM) &times; volume (mL) / 1000.</p>
     <p>Crystal: V = abc&radic;(1 &minus; cos&sup2;&alpha; &minus; cos&sup2;&beta; &minus; cos&sup2;&gamma; + 2 cos&alpha; cos&beta; cos&gamma;), density = Z &times; M / (N<sub>A</sub> &times; V). Atomic weights are IUPAC abbreviated standard values (elements up to Fm; the mass number of the longest-lived isotope is used where no stable isotope exists). Formulas may use parentheses and hydrate dots, e.g. CuSO4&middot;5H2O.</p>
+    <p>Conductivity: &sigma; = L / (R &times; &pi;r&sup2;) for a cylinder of length L and radius r, with R converted from k&Omega; to &Omega;.</p>
+    <p>Activation energy: E<sub>a</sub> = R ln(v&#8322;/v&#8321;) / (1/T&#8321; &minus; 1/T&#8322;), with R = N<sub>A</sub>k<sub>B</sub> = 8.314462618 J mol&#8315;&sup1; K&#8315;&sup1;. The values are used as entered. For an ionic conductor that follows &sigma;T = A exp(&minus;E<sub>a</sub>/RT), enter &sigma;T instead of &sigma;.</p>
     <p class="copyright">&copy; 2026 TN_KU. All rights reserved.</p>
   </footer>
 </main>
@@ -229,7 +260,9 @@ const TABS = [
   { id: "energy", label: "Energy" },
   { id: "xrd",    label: "XRD" },
   { id: "reagent", label: "Reagent" },
-  { id: "crystal", label: "Crystal" }
+  { id: "crystal", label: "Crystal" },
+  { id: "conductivity", label: "Conductivity" },
+  { id: "activation", label: "Activation energy" }
 ];
 
 function renderTabs(current) {
@@ -577,6 +610,7 @@ function makeField(parent, label, onInput, opts = {}) {
   input.addEventListener("input", onInput);
   wrap.append(span, input);
   parent.appendChild(wrap);
+  input.labelEl = span;
   return input;
 }
 
@@ -652,12 +686,167 @@ function resetCrystal() {
 $("crystalReset").addEventListener("click", resetCrystal);
 
 /* ============================================================
+   Conductivity (cylindrical sample)
+   Step 1: set the length L (cm) and the radius r (cm).
+   Step 2: edit the resistance R (kOhm) or the conductivity (S/cm).
+   sigma = L / (R x A), A = pi r^2, with R in ohm
+   ============================================================ */
+const DEFAULT_LENGTH = 1;
+const DEFAULT_RADIUS = 0.5;
+const DEFAULT_RESISTANCE = 1;
+const SIGMA_DIGITS = 5; // digits after the point in the exponential form (6 significant figures)
+
+const conductivity = { last: "res" }; // which of resistance / conductivity was edited last
+
+const cdLength = makeRow($("conductivitySample"), "cm (L)", () => recomputeConductivity());
+const cdRadius = makeRow($("conductivitySample"), "cm (r)", () => recomputeConductivity());
+cdLength.input.setAttribute("aria-label", "Length in cm");
+cdRadius.input.setAttribute("aria-label", "Radius in cm");
+
+const cdRes = makeRow($("conductivityResult"), "k\u03A9",            () => conductivityEdited("res"));
+const cdSig = makeRow($("conductivityResult"), "S cm\u207B\u00B9",   () => conductivityEdited("sig"));
+const conductivityFields = { res: cdRes, sig: cdSig };
+
+function conductivityEdited(id) {
+  conductivity.last = id;
+  recomputeConductivity();
+}
+
+function setConductivityStatus(msg, isError) {
+  const el = $("conductivityStatus");
+  el.textContent = msg;
+  el.classList.toggle("error", Boolean(isError));
+}
+
+// Recompute the field that was not edited last, using the current length and radius
+function recomputeConductivity() {
+  const src = conductivity.last;
+  const other = src === "res" ? "sig" : "res";
+  for (const id in conductivityFields) conductivityFields[id].row.classList.toggle("active", id === src);
+
+  const L = parseFloat(cdLength.input.value);
+  const r = parseFloat(cdRadius.input.value);
+  const x = parseFloat(conductivityFields[src].input.value);
+  const out = conductivityFields[other].input;
+
+  if (!(L > 0) || !(r > 0)) { out.value = ""; setConductivityStatus("Enter a length and a radius above 0.", true); return; }
+  if (Number.isNaN(x)) { out.value = ""; setConductivityStatus("", false); return; }
+  if (!(x > 0)) { out.value = ""; setConductivityStatus("Enter a value above 0.", true); return; }
+
+  const area = Math.PI * r * r; // cm^2
+  if (src === "res") {
+    const sigma = L / (x * 1000 * area);               // kOhm -> Ohm, then S/cm
+    out.value = Number.isFinite(sigma) ? sigma.toExponential(SIGMA_DIGITS) : "";
+  } else {
+    const resistance = L / (x * area) / 1000;          // Ohm -> kOhm
+    out.value = Number.isFinite(resistance) ? format(resistance) : "";
+  }
+  setConductivityStatus("", false);
+}
+
+function resetConductivity() {
+  cdLength.input.value = DEFAULT_LENGTH;
+  cdRadius.input.value = DEFAULT_RADIUS;
+  cdRes.input.value = DEFAULT_RESISTANCE;
+  conductivity.last = "res";
+  recomputeConductivity();
+}
+$("conductivityReset").addEventListener("click", resetConductivity);
+
+/* ============================================================
+   Activation energy (two-point Arrhenius)
+   Enter T1, T2 and the value measured at each (rate constant, conductivity, ...).
+   Ea = R ln(v2 / v1) / (1/T1 - 1/T2), shown in kJ/mol
+   ============================================================ */
+const R_GAS = NA * KB; // gas constant, J/(mol K)
+const DEFAULT_ACTIVATION = { unit: "K", t1: 300, v1: 0.001, t2: 350, v2: 0.0175 };
+
+const activation = { unit: "K" };
+
+// Temperature unit selector, placed in the first row of the grid
+const acUnitWrap = document.createElement("label");
+acUnitWrap.className = "field unit-field";
+const acUnitLabel = document.createElement("span");
+acUnitLabel.textContent = "Temperature unit";
+const acUnit = document.createElement("select");
+acUnit.add(new Option("K", "K"));
+acUnit.add(new Option("\u00B0C", "C"));
+acUnitWrap.append(acUnitLabel, acUnit);
+$("activationInputs").appendChild(acUnitWrap);
+
+const acT1 = makeField($("activationInputs"), "T\u2081 (K)",      () => recomputeActivation());
+const acV1 = makeField($("activationInputs"), "Value at T\u2081", () => recomputeActivation());
+const acT2 = makeField($("activationInputs"), "T\u2082 (K)",      () => recomputeActivation());
+const acV2 = makeField($("activationInputs"), "Value at T\u2082", () => recomputeActivation());
+
+const acOut = makeRow($("activationResult"), "kJ mol\u207B\u00B9", () => {});
+acOut.input.readOnly = true;
+acOut.input.setAttribute("aria-label", "Activation energy in kJ per mol");
+acOut.row.classList.add("active");
+
+function setActivationUnit(unit) {
+  activation.unit = unit;
+  const name = unit === "C" ? "\u00B0C" : "K";
+  acT1.labelEl.textContent = "T\u2081 (" + name + ")";
+  acT2.labelEl.textContent = "T\u2082 (" + name + ")";
+}
+
+// Switching the unit converts the temperatures already entered, so the measurement stays the same
+function onActivationUnitChange() {
+  const next = acUnit.value;
+  if (next === activation.unit) return;
+  const shift = next === "C" ? -273.15 : 273.15;
+  for (const input of [acT1, acT2]) {
+    const t = parseFloat(input.value);
+    if (!Number.isNaN(t)) input.value = format(t + shift);
+  }
+  setActivationUnit(next);
+  recomputeActivation();
+}
+acUnit.addEventListener("change", onActivationUnitChange);
+
+function setActivationStatus(msg, isError) {
+  const el = $("activationStatus");
+  el.textContent = msg;
+  el.classList.toggle("error", Boolean(isError));
+}
+
+function recomputeActivation() {
+  const toK = t => (activation.unit === "C" ? t + 273.15 : t);
+  const [t1, t2] = [acT1, acT2].map(i => toK(parseFloat(i.value)));
+  const [v1, v2] = [acV1, acV2].map(i => parseFloat(i.value));
+  let result = NaN, message = "";
+
+  if ([t1, t2].some(t => t <= 0)) message = "Temperatures must be above 0 K.";
+  else if ([v1, v2].some(v => v <= 0)) message = "The values must be above 0.";
+  else if (t1 === t2) message = "Use two different temperatures.";
+  else if ([t1, t2, v1, v2].every(Number.isFinite)) {
+    result = (R_GAS * Math.log(v2 / v1)) / (1 / t1 - 1 / t2) / 1000;
+  }
+
+  acOut.input.value = Number.isFinite(result) ? format(result) : "";
+  setActivationStatus(message, Boolean(message));
+}
+
+function resetActivation() {
+  const d = DEFAULT_ACTIVATION;
+  acUnit.value = d.unit;
+  setActivationUnit(d.unit);
+  acT1.value = d.t1; acV1.value = d.v1;
+  acT2.value = d.t2; acV2.value = d.v2;
+  recomputeActivation();
+}
+$("activationReset").addEventListener("click", resetActivation);
+
+/* ============================================================
    Start
    ============================================================ */
 $("energyReset").click();
 resetXrd();
 resetReagent();
 resetCrystal();
+resetConductivity();
+resetActivation();
 renderTabs("energy");
 </script>
 </body>
