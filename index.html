@@ -91,7 +91,7 @@
 <body>
 <main>
   <h1>Unit Converter</h1>
-  <p class="intro">A simple unit converter for energy and X-ray diffraction (XRD) with NO WARRANTY and for private use only. Convert between eV, Hartree, kJ mol&#8315;&sup1;, cm&#8315;&sup1; and nm, or find 2&theta;, d and Q from an X-ray wavelength or energy.</p>
+  <p class="intro">A simple unit converter with NO WARRANTY and for private use only. Convert between eV, Hartree, kJ mol&#8315;&sup1;, cm&#8315;&sup1; and nm, find 2&theta;, d and Q from an X-ray wavelength or energy, or work out the mass (mg), amount (mmol) and concentration (mM) of a reagent solution.</p>
 
   <div class="tabs" id="tabs" role="group" aria-label="Conversion category"></div>
 
@@ -115,10 +115,24 @@
     <div class="actions"><button type="button" id="xrdReset">Reset</button></div>
   </section>
 
+  <!-- ===== Reagent ===== -->
+  <section id="panel-reagent" hidden>
+    <h2>1. Reagent and solution</h2>
+    <p class="lead">Set the molecular weight and the volume of the solution.</p>
+    <div class="group" id="reagentSource"></div>
+
+    <h2>2. Mass, amount and concentration</h2>
+    <p class="lead">Type the mass, the amount, or the concentration. The other two update at once.</p>
+    <div class="group" id="reagentResult"></div>
+    <p class="status" id="reagentStatus" aria-live="polite"></p>
+    <div class="actions"><button type="button" id="reagentReset">Reset</button></div>
+  </section>
+
   <footer>
     <p>Calculated in your browser. Constants h, c, e and N<sub>A</sub> are SI-exact; the Hartree energy is CODATA 2022.</p>
     <p>Energy: wavenumber and wavelength are converted with E = hc &times; wavenumber and E = hc / wavelength.</p>
     <p>XRD: &lambda; = 2d sin&theta;, Q = 4&pi; sin&theta; / &lambda; = 2&pi; / d, &lambda;(&Aring;) = 12.3984198 / E(keV). Preset wavelengths are typical tabulated values.</p>
+    <p>Reagent: amount (mmol) = mass (mg) / molecular weight (g/mol) = concentration (mM) &times; volume (mL) / 1000.</p>
     <p class="copyright">&copy; 2026 TN_KU. All rights reserved.</p>
   </footer>
 </main>
@@ -182,7 +196,8 @@ function makeRow(parent, label, onInput) {
    ============================================================ */
 const TABS = [
   { id: "energy", label: "Energy" },
-  { id: "xrd",    label: "XRD" }
+  { id: "xrd",    label: "XRD" },
+  { id: "reagent", label: "Reagent" }
 ];
 
 function renderTabs(current) {
@@ -358,10 +373,83 @@ function resetXrd() {
 $("xrdReset").addEventListener("click", resetXrd);
 
 /* ============================================================
+   Reagent
+   Step 1: set the molecular weight (g/mol) and the volume (mL).
+   Step 2: edit the mass (mg), the amount (mmol), or the concentration (mM).
+   amount (mmol) = mass (mg) / molecular weight (g/mol)
+                 = concentration (mM) x volume (mL) / 1000
+   ============================================================ */
+const DEFAULT_MW = 100;
+const DEFAULT_VOLUME = 10;
+const DEFAULT_CONC = 10;
+
+const reagent = { last: "conc" }; // which of mass / amount / concentration was edited last
+
+const mw   = makeRow($("reagentSource"), "g/mol", () => recomputeReagent());
+const vol  = makeRow($("reagentSource"), "mL",    () => recomputeReagent());
+const mass = makeRow($("reagentResult"), "mg",    () => reagentEdited("mass"));
+const mmol = makeRow($("reagentResult"), "mmol",  () => reagentEdited("mmol"));
+const conc = makeRow($("reagentResult"), "mM",    () => reagentEdited("conc"));
+const reagentFields = { mass, mmol, conc };
+
+function reagentEdited(id) {
+  reagent.last = id;
+  recomputeReagent();
+}
+
+function setReagentStatus(msg, isError) {
+  const el = $("reagentStatus");
+  el.textContent = msg;
+  el.classList.toggle("error", Boolean(isError));
+}
+
+// Recompute the other two fields from the one edited last, using the current molecular weight and volume
+function recomputeReagent() {
+  const src = reagent.last;
+  for (const id in reagentFields) reagentFields[id].row.classList.toggle("active", id === src);
+
+  const mwv = parseFloat(mw.input.value);
+  const v = parseFloat(vol.input.value);
+  const x = parseFloat(reagentFields[src].input.value);
+
+  const clearOthers = () => {
+    for (const id in reagentFields) if (id !== src) reagentFields[id].input.value = "";
+  };
+
+  if (!(mwv > 0) || !(v > 0)) { clearOthers(); setReagentStatus("Enter a molecular weight and a volume above 0.", true); return; }
+  if (Number.isNaN(x)) { clearOthers(); setReagentStatus("", false); return; }
+  if (x < 0) { clearOthers(); setReagentStatus("Enter a value of 0 or more.", true); return; }
+
+  // Use the amount (mmol) as the common step between mass and concentration
+  const amount = src === "mass" ? x / mwv
+               : src === "conc" ? (x * v) / 1000
+               : x;
+  const out = {
+    mass: amount * mwv,           // mmol -> mg
+    mmol: amount,
+    conc: (amount * 1000) / v     // mmol -> mM
+  };
+  for (const id in reagentFields) {
+    if (id !== src) reagentFields[id].input.value = format(out[id]);
+  }
+  setReagentStatus("", false);
+}
+
+function resetReagent() {
+  mw.input.value = DEFAULT_MW;
+  vol.input.value = DEFAULT_VOLUME;
+  conc.input.value = DEFAULT_CONC;
+  reagent.last = "conc";
+  recomputeReagent();
+}
+$("reagentReset").addEventListener("click", resetReagent);
+
+/* ============================================================
    Start
    ============================================================ */
 $("energyReset").click();
 resetXrd();
+resetReagent();
 renderTabs("energy");
 </script>
 </body>
