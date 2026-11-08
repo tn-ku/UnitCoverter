@@ -82,6 +82,19 @@
   .status { min-height: 1.7em; margin: 12px 0 0; font-size: .9rem; color: var(--muted); }
   .status.error { color: var(--error); }
 
+  /* Labeled fields (chemical formula and unit cell) */
+  .field { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); min-width: 0; }
+  .field input {
+    font: inherit; font-size: 1.1rem; font-variant-numeric: tabular-nums;
+    width: 100%; min-width: 0; padding: 10px;
+    color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  .field.formula-field input { font-size: 1.35rem; }
+  .field.z-field { grid-column: 1 / -1; }
+  .field.z-field input { max-width: 10rem; }
+  .cell-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
   :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   footer { margin-top: 48px; color: var(--muted); font-size: .8rem; }
   footer p { margin: 0 0 8px; }
@@ -91,7 +104,7 @@
 <body>
 <main>
   <h1>Unit Converter</h1>
-  <p class="intro">A simple unit converter with NO WARRANTY and for private use only. Convert between eV, Hartree, kJ mol&#8315;&sup1;, cm&#8315;&sup1; and nm, find 2&theta;, d and Q from an X-ray wavelength or energy, or work out the mass (mg), amount (mmol) and concentration (mM) of a reagent solution.</p>
+  <p class="intro">A simple unit converter for energy and X-ray diffraction (XRD) with NO WARRANTY and for private use only. Convert between eV, Hartree, kJ mol&#8315;&sup1;, cm&#8315;&sup1;, nm and K, find 2&theta;, d and Q from an X-ray wavelength or energy, work out the mass (mg), amount (mmol) and concentration (mM) of a reagent solution, or calculate the density of a crystal from its chemical formula and unit cell.</p>
 
   <div class="tabs" id="tabs" role="group" aria-label="Conversion category"></div>
 
@@ -128,11 +141,28 @@
     <div class="actions"><button type="button" id="reagentReset">Reset</button></div>
   </section>
 
+  <!-- ===== Crystal ===== -->
+  <section id="panel-crystal" hidden>
+    <h2>1. Chemical formula</h2>
+    <p class="lead">Enter a formula such as H2O, Ca(OH)2 or CuSO4&middot;5H2O.</p>
+    <div class="group" id="crystalFormula"></div>
+
+    <h2>2. Unit cell</h2>
+    <p class="lead">Enter the cell parameters and Z (the number of formula units per cell).</p>
+    <div class="cell-grid" id="crystalCell"></div>
+
+    <h2>3. Result</h2>
+    <div class="group" id="crystalResult"></div>
+    <p class="status" id="crystalStatus" aria-live="polite"></p>
+    <div class="actions"><button type="button" id="crystalReset">Reset</button></div>
+  </section>
+
   <footer>
-    <p>Calculated in your browser. Constants h, c, e and N<sub>A</sub> are SI-exact; the Hartree energy is CODATA 2022.</p>
-    <p>Energy: wavenumber and wavelength are converted with E = hc &times; wavenumber and E = hc / wavelength.</p>
+    <p>Calculated in your browser. Constants h, c, e, N<sub>A</sub> and k<sub>B</sub> are SI-exact; the Hartree energy is CODATA 2022.</p>
+    <p>Energy: wavenumber and wavelength are converted with E = hc &times; wavenumber and E = hc / wavelength. Temperature is E / k<sub>B</sub> (the molar energy divided by the gas constant R).</p>
     <p>XRD: &lambda; = 2d sin&theta;, Q = 4&pi; sin&theta; / &lambda; = 2&pi; / d, &lambda;(&Aring;) = 12.3984198 / E(keV). Preset wavelengths are typical tabulated values.</p>
     <p>Reagent: amount (mmol) = mass (mg) / molecular weight (g/mol) = concentration (mM) &times; volume (mL) / 1000.</p>
+    <p>Crystal: V = abc&radic;(1 &minus; cos&sup2;&alpha; &minus; cos&sup2;&beta; &minus; cos&sup2;&gamma; + 2 cos&alpha; cos&beta; cos&gamma;), density = Z &times; M / (N<sub>A</sub> &times; V). Atomic weights are IUPAC abbreviated standard values (elements up to Fm; the mass number of the longest-lived isotope is used where no stable isotope exists). Formulas may use parentheses and hydrate dots, e.g. CuSO4&middot;5H2O.</p>
     <p class="copyright">&copy; 2026 TN_KU. All rights reserved.</p>
   </footer>
 </main>
@@ -145,6 +175,7 @@ const H  = 6.62607015e-34;      // Planck constant, J s (exact)
 const C  = 299792458;           // speed of light, m/s (exact)
 const E  = 1.602176634e-19;     // elementary charge, C (exact) -> 1 eV in J
 const NA = 6.02214076e23;       // Avogadro constant, 1/mol (exact)
+const KB = 1.380649e-23;        // Boltzmann constant, J/K (exact); R = NA * KB
 const EH = 4.3597447222060e-18; // Hartree energy, J (CODATA 2022)
 const HC_KEV_ANG = (H * C) / (E * 1e3) * 1e10; // keV * angstrom (about 12.39842)
 
@@ -197,7 +228,8 @@ function makeRow(parent, label, onInput) {
 const TABS = [
   { id: "energy", label: "Energy" },
   { id: "xrd",    label: "XRD" },
-  { id: "reagent", label: "Reagent" }
+  { id: "reagent", label: "Reagent" },
+  { id: "crystal", label: "Crystal" }
 ];
 
 function renderTabs(current) {
@@ -229,6 +261,7 @@ const ENERGY_UNITS = [
   { id: "hartree", label: "Hartree",              ...linear(EH) },
   { id: "kjmol",   label: "kJ mol\u207B\u00B9",   ...linear(1000 / NA) },
   { id: "cm1",     label: "cm\u207B\u00B9",       ...linear(H * C * 100) },
+  { id: "kelvin",  label: "K",                    ...linear(KB) },
   { id: "nm",      label: "nm",
     toJ:   v => (v > 0 ? (H * C * 1e9) / v : NaN),
     fromJ: j => (j > 0 ? (H * C * 1e9) / j : NaN) }
@@ -445,11 +478,186 @@ function resetReagent() {
 $("reagentReset").addEventListener("click", resetReagent);
 
 /* ============================================================
+   Crystal
+   Step 1: chemical formula, e.g. H2O, Ca(OH)2, CuSO4*5H2O
+   Step 2: cell parameters a, b, c (angstrom), alpha, beta, gamma (deg), and Z
+   density (g/cm3) = Z x M / (N_A x V), with V in cm3 (1 angstrom^3 = 1e-24 cm3)
+   ============================================================ */
+const ATOMIC_WEIGHTS = {
+  D: 2.014,
+  H: 1.008, He: 4.0026, Li: 6.94, Be: 9.0122, B: 10.81, C: 12.011, N: 14.007, O: 15.999,
+  F: 18.998, Ne: 20.180, Na: 22.990, Mg: 24.305, Al: 26.982, Si: 28.085, P: 30.974, S: 32.06,
+  Cl: 35.45, Ar: 39.95, K: 39.098, Ca: 40.078, Sc: 44.956, Ti: 47.867, V: 50.942, Cr: 51.996,
+  Mn: 54.938, Fe: 55.845, Co: 58.933, Ni: 58.693, Cu: 63.546, Zn: 65.38, Ga: 69.723, Ge: 72.630,
+  As: 74.922, Se: 78.971, Br: 79.904, Kr: 83.798, Rb: 85.468, Sr: 87.62, Y: 88.906, Zr: 91.224,
+  Nb: 92.906, Mo: 95.95, Tc: 98, Ru: 101.07, Rh: 102.91, Pd: 106.42, Ag: 107.87, Cd: 112.41,
+  In: 114.82, Sn: 118.71, Sb: 121.76, Te: 127.60, I: 126.90, Xe: 131.29, Cs: 132.91, Ba: 137.33,
+  La: 138.91, Ce: 140.12, Pr: 140.91, Nd: 144.24, Pm: 145, Sm: 150.36, Eu: 151.96, Gd: 157.25,
+  Tb: 158.93, Dy: 162.50, Ho: 164.93, Er: 167.26, Tm: 168.93, Yb: 173.05, Lu: 174.97, Hf: 178.49,
+  Ta: 180.95, W: 183.84, Re: 186.21, Os: 190.23, Ir: 192.22, Pt: 195.08, Au: 196.97, Hg: 200.59,
+  Tl: 204.38, Pb: 207.2, Bi: 208.98, Po: 209, At: 210, Rn: 222, Fr: 223, Ra: 226, Ac: 227,
+  Th: 232.04, Pa: 231.04, U: 238.03, Np: 237, Pu: 244, Am: 243, Cm: 247, Bk: 247, Cf: 251,
+  Es: 252, Fm: 257
+};
+
+// Turn a formula such as "Ca(OH)2" or "CuSO4*5H2O" into { Ca: 1, O: 2, H: 2 }
+function parseFormula(text) {
+  const s = text
+    .replace(/\s+/g, "")
+    .replace(/[\u2080-\u2089]/g, ch => String(ch.charCodeAt(0) - 0x2080)) // subscript digits
+    .replace(/[\[{]/g, "(")
+    .replace(/[\]}]/g, ")");
+  if (!s) throw new Error("Enter a chemical formula.");
+
+  const add = (target, source, n) => {
+    for (const el in source) target[el] = (target[el] || 0) + source[el] * n;
+  };
+  const total = {};
+
+  // Hydrate separators: middle dot, bullet, and * (a plain "." is read as a decimal point)
+  for (const part of s.split(/[\u00B7\u2022\u2219\u22C5*]/)) {
+    if (!part) throw new Error("Check the hydrate separator (\u00B7) in the formula.");
+
+    let i = 0;
+    const numberRe = /\d+(?:\.\d+)?/y;
+    const readNumber = () => {
+      numberRe.lastIndex = i;
+      const m = numberRe.exec(part);
+      if (!m) return 1;
+      i += m[0].length;
+      return parseFloat(m[0]);
+    };
+
+    const coefficient = readNumber(); // e.g. the 5 in 5H2O
+    const stack = [{}];
+    while (i < part.length) {
+      const ch = part[i];
+      if (ch === "(") {
+        stack.push({});
+        i++;
+      } else if (ch === ")") {
+        if (stack.length < 2) throw new Error("The parentheses do not match.");
+        i++;
+        const n = readNumber();
+        add(stack[stack.length - 2], stack.pop(), n);
+      } else if (/[A-Z]/.test(ch)) {
+        let sym = ch;
+        i++;
+        while (i < part.length && /[a-z]/.test(part[i])) sym += part[i++];
+        if (!Object.hasOwn(ATOMIC_WEIGHTS, sym)) throw new Error("Unknown element: " + sym);
+        add(stack[stack.length - 1], { [sym]: 1 }, readNumber());
+      } else {
+        throw new Error(`Unexpected character "${ch}". Element symbols start with a capital letter, e.g. NaCl.`);
+      }
+    }
+    if (stack.length !== 1) throw new Error("The parentheses do not match.");
+    add(total, stack[0], coefficient);
+  }
+  return total;
+}
+
+function formulaWeight(counts) {
+  let sum = 0;
+  for (const el in counts) sum += counts[el] * ATOMIC_WEIGHTS[el];
+  if (!(sum > 0)) throw new Error("The formula has no atoms.");
+  return sum;
+}
+
+// A labeled input (used for the formula and the cell parameters)
+function makeField(parent, label, onInput, opts = {}) {
+  const wrap = document.createElement("label");
+  wrap.className = "field" + (opts.className ? " " + opts.className : "");
+  const span = document.createElement("span");
+  span.textContent = label;
+  const input = document.createElement("input");
+  input.type = opts.type || "number";
+  if (input.type === "number") { input.inputMode = "decimal"; input.step = "any"; }
+  else { input.autocomplete = "off"; input.spellcheck = false; input.setAttribute("autocapitalize", "off"); }
+  if (opts.placeholder) input.placeholder = opts.placeholder;
+  input.addEventListener("input", onInput);
+  wrap.append(span, input);
+  parent.appendChild(wrap);
+  return input;
+}
+
+const CELL_DEFAULTS = { a: 5.640, b: 5.640, c: 5.640, alpha: 90, beta: 90, gamma: 90, z: 4 }; // NaCl
+const DEFAULT_FORMULA = "NaCl";
+
+const formulaInput = makeField($("crystalFormula"), "Chemical formula", () => recomputeCrystal(),
+  { type: "text", className: "formula-field", placeholder: "e.g. NaCl, H2O, CuSO4\u00B75H2O" });
+
+const cellInputs = {};
+[
+  ["a", "a (\u00C5)"], ["b", "b (\u00C5)"], ["c", "c (\u00C5)"],
+  ["alpha", "\u03B1 (\u00B0)"], ["beta", "\u03B2 (\u00B0)"], ["gamma", "\u03B3 (\u00B0)"]
+].forEach(([id, label]) => { cellInputs[id] = makeField($("crystalCell"), label, () => recomputeCrystal()); });
+cellInputs.z = makeField($("crystalCell"), "Z (formula units per cell)", () => recomputeCrystal(), { className: "z-field" });
+
+// Read-only results
+const fwOut   = makeRow($("crystalResult"), "g/mol",  () => {});
+const volOut  = makeRow($("crystalResult"), "\u00C5\u00B3", () => {});
+const densOut = makeRow($("crystalResult"), "g/cm\u00B3",   () => {});
+for (const r of [fwOut, volOut, densOut]) r.input.readOnly = true;
+densOut.row.classList.add("active");
+fwOut.input.setAttribute("aria-label", "Formula weight in g/mol");
+volOut.input.setAttribute("aria-label", "Cell volume in cubic angstrom");
+densOut.input.setAttribute("aria-label", "Density in g/cm3");
+
+function setCrystalStatus(msg, isError) {
+  const el = $("crystalStatus");
+  el.textContent = msg;
+  el.classList.toggle("error", Boolean(isError));
+}
+
+// Formula weight needs only the formula, volume needs only the cell, density needs both and Z
+function recomputeCrystal() {
+  const show = (out, v) => { out.input.value = Number.isFinite(v) ? format(v) : ""; };
+  let M = NaN, V = NaN, formulaError = "", cellError = "";
+
+  const text = formulaInput.value.trim();
+  if (text) {
+    try { M = formulaWeight(parseFormula(text)); }
+    catch (e) { formulaError = e.message; }
+  }
+
+  const val = id => (cellInputs[id].value === "" ? NaN : parseFloat(cellInputs[id].value));
+  const [a, b, c] = ["a", "b", "c"].map(val);
+  const [al, be, ga] = ["alpha", "beta", "gamma"].map(val);
+  const z = val("z");
+
+  if ([a, b, c].some(x => x <= 0)) cellError = "a, b and c must be above 0.";
+  else if ([al, be, ga].some(x => x <= 0 || x >= 180)) cellError = "The angles must be between 0\u00B0 and 180\u00B0.";
+  else if (z <= 0) cellError = "Z must be above 0.";
+  else if ([a, b, c, al, be, ga].every(Number.isFinite)) {
+    const rad = d => (d * Math.PI) / 180;
+    const [ca, cb, cg] = [al, be, ga].map(d => Math.cos(rad(d)));
+    const t = 1 - ca * ca - cb * cb - cg * cg + 2 * ca * cb * cg;
+    if (t > 0) V = a * b * c * Math.sqrt(t);
+    else cellError = "These angles cannot form a valid unit cell.";
+  }
+
+  show(fwOut, M);
+  show(volOut, V);
+  show(densOut, Number.isFinite(M) && Number.isFinite(V) && z > 0 ? (z * M) / (NA * V * 1e-24) : NaN);
+
+  const message = formulaError || cellError;
+  setCrystalStatus(message, Boolean(message));
+}
+
+function resetCrystal() {
+  formulaInput.value = DEFAULT_FORMULA;
+  for (const id in CELL_DEFAULTS) cellInputs[id].value = CELL_DEFAULTS[id];
+  recomputeCrystal();
+}
+$("crystalReset").addEventListener("click", resetCrystal);
+
+/* ============================================================
    Start
    ============================================================ */
 $("energyReset").click();
 resetXrd();
 resetReagent();
+resetCrystal();
 renderTabs("energy");
 </script>
 </body>
